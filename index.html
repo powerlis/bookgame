@@ -104,7 +104,6 @@
       border-radius:5px; overflow:hidden; margin-bottom:16px; }
     .bar{ height:100%; background: var(--main-color); transition: width .35s ease; }
 
-    /* 옵션 버튼 */
     .opt {
       position: relative;
       width:100%; padding:16px; margin-bottom:12px;
@@ -229,32 +228,36 @@
   /* ========= Start Screen ========= */
   function renderStart(){
     clearTimer();
-    const joinCode = getJoinCode(); // 참가자 전용 링크 여부
+    const joinCode = getJoinCode();
+
+    // 기본: 호스트 전용 / 참가자 링크: 참가자 전용
+    const hostOnly = !joinCode;
 
     appEl.innerHTML = `
       <div class="head">
         <span class="pill">임실고등학교 도서관</span>
         <h1>밸런스 독서 게임</h1>
         <p class="lead">
-          ${ joinCode ? '공유받은 링크로 참가하세요.' : '호스트는 방을 만들고, 참가자는 방 코드로 입장합니다.'}
+          ${ hostOnly ? '호스트가 방을 만들고 링크를 공유하세요.' : '공유받은 링크로 참가하세요.'}
         </p>
       </div>
       <div class="pad card">
         <div class="row">
-          ${ joinCode ? '' : `
+          ${ hostOnly ? `
           <div class="col">
             <label class="muted">호스트 이름</label>
             <input id="hostName" type="text" placeholder="예: 사회자/교사" />
             <button class="btn" id="mkroom">방 만들기</button>
           </div>
-          ` }
+          ` : `
           <div class="col">
             <label class="muted">방 코드</label>
-            <input id="code" type="text" placeholder="ABC123" ${ joinCode ? `value="${joinCode}"` : '' } />
+            <input id="code" type="text" placeholder="ABC123" value="${joinCode}" />
             <label class="muted">참가자 이름</label>
             <input id="name" type="text" placeholder="이름" />
             <button class="btn" id="join">참가자로 입장</button>
           </div>
+          `}
         </div>
       </div>
     `;
@@ -278,18 +281,21 @@
       });
     }
 
-    $('#join').addEventListener('click', async ()=>{
-      const code = $('#code').value.trim().toUpperCase();
-      const name = $('#name').value.trim() || '참가자';
-      const snap = await db.collection('rooms').doc(code).get();
-      if(!snap.exists){ alert('존재하지 않는 방 코드입니다.'); return; }
-      me = { id: uid(), name, role:'player' };
-      room.id = code;
-      await db.collection('rooms').doc(code).collection('players').doc(me.id).set({
-        name, role:'player', joinedAt: firebase.firestore.FieldValue.serverTimestamp()
+    const joinBtn = $('#join');
+    if(joinBtn){
+      joinBtn.addEventListener('click', async ()=>{
+        const code = $('#code').value.trim().toUpperCase();
+        const name = $('#name').value.trim() || '참가자';
+        const snap = await db.collection('rooms').doc(code).get();
+        if(!snap.exists){ alert('존재하지 않는 방 코드입니다.'); return; }
+        me = { id: uid(), name, role:'player' };
+        room.id = code;
+        await db.collection('rooms').doc(code).collection('players').doc(me.id).set({
+          name, role:'player', joinedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        listenRoom();
       });
-      listenRoom();
-    });
+    }
   }
 
   /* ========= Listeners ========= */
@@ -451,7 +457,6 @@
                        style="flex:1; padding:10px; border:2px solid var(--border-color); border-radius:12px" />
                 <button class="btn" id="copyShare" style="width:auto; padding:10px 14px">복사</button>
               </div>
-              <p class="muted" style="margin:6px 0 0">이 링크로 접속하면 호스트 영역 없이, 방코드가 자동 입력된 참가자 전용 화면이 열립니다.</p>
             </div>
             <button class="btn" id="start" style="margin-top:14px">게임 시작</button>
           ` : ''}
@@ -589,6 +594,7 @@
       if(nextBtn) nextBtn.addEventListener('click', ()=> nextQuestionSafe(curIndex));
     }
 
+    // 타이머 시작/갱신
     startTimerTick();
   }
 
@@ -597,6 +603,7 @@
     const opt = e.target.closest('.opt');
     if(!opt) return;
 
+    // UI 즉시 반영
     appEl.querySelectorAll('.opt').forEach(b=>{
       b.classList.remove('selected');
       b.setAttribute('aria-pressed','false');
@@ -604,6 +611,7 @@
     opt.classList.add('selected');
     opt.setAttribute('aria-pressed','true');
 
+    // 저장
     try{
       await pick(curIndex, opt.dataset.type);
     }catch(err){
